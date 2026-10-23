@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Program;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreMemberRequest extends FormRequest
 {
@@ -13,7 +15,7 @@ class StoreMemberRequest extends FormRequest
 
     public function rules(): array
     {
-        return [
+        $rules = [
             'full_name' => [
                 'required',
                 'string',
@@ -56,13 +58,13 @@ class StoreMemberRequest extends FormRequest
             'local_church_id' => [
                 'required',
                 'integer',
-                'exists:local_churches,id',
+                Rule::exists('local_churches', 'id')->where('is_active', true),
             ],
 
             'program_id' => [
                 'required',
                 'integer',
-                'exists:programs,id',
+                Rule::exists('programs', 'id')->where('is_active', true),
             ],
 
             'password' => [
@@ -71,6 +73,34 @@ class StoreMemberRequest extends FormRequest
                 'min:8',
                 'confirmed',
             ],
+
+            'preferred_activity' => ['nullable', 'string', 'max:255'],
+            'emergency_contact_name' => ['nullable', 'string', 'max:255'],
+            'emergency_contact_phone' => ['nullable', 'string', 'max:30'],
+            'medical_notes' => ['nullable', 'string', 'max:1000'],
+            'consent' => ['nullable', 'boolean'],
         ];
+
+        $programId = $this->integer('program_id');
+
+        if ($programId > 0) {
+            $program = Program::query()->with('formFields')->find($programId);
+
+            if ($program) {
+                foreach ($program->formFields()->where('is_active', true)->get() as $field) {
+                    $fieldRules = $field->validation_rules ?? [];
+
+                    if ($field->is_required) {
+                        $fieldRules = array_merge(['required'], $fieldRules);
+                    } else {
+                        $fieldRules = array_merge(['nullable'], $fieldRules);
+                    }
+
+                    $rules[$field->field_key] = $fieldRules;
+                }
+            }
+        }
+
+        return $rules;
     }
 }

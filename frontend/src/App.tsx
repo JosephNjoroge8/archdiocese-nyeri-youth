@@ -13,6 +13,9 @@ import {
   X,
 } from 'lucide-react'
 import { useState } from 'react'
+import { Link, Route, Routes } from 'react-router-dom'
+import RegisterPage from './pages/RegisterPage'
+import AdminPage from './pages/AdminPage'
 
 const programs = [
   {
@@ -86,17 +89,14 @@ const benefits = [
   'Administrative reports and insights',
 ]
 
-function App() {
+function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
     <div className="min-h-screen bg-sky-50 text-slate-800">
-      {/* =========================
-          NAVIGATION
-      ========================== */}
       <header className="sticky top-0 z-50 border-b border-sky-100 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
-          <a href="#" className="flex items-center gap-3">
+          <Link to="/" className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-600 text-white shadow-lg shadow-sky-200">
               <Church size={23} strokeWidth={2.2} />
             </div>
@@ -110,9 +110,8 @@ function App() {
                 Youth Registration & Management
               </p>
             </div>
-          </a>
+          </Link>
 
-          {/* Desktop navigation */}
           <nav className="hidden items-center gap-8 md:flex">
             <a
               href="#programs"
@@ -136,7 +135,6 @@ function App() {
             </a>
           </nav>
 
-          {/* Desktop actions */}
           <div className="hidden items-center gap-3 md:flex">
             <a
               href="/login"
@@ -145,15 +143,14 @@ function App() {
               Member Login
             </a>
 
-            <a
-              href="/register"
+            <Link
+              to="/register"
               className="rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-sky-200 transition hover:bg-sky-700"
             >
               Register Now
-            </a>
+            </Link>
           </div>
 
-          {/* Mobile menu button */}
           <button
             type="button"
             aria-label="Toggle navigation menu"
@@ -165,7 +162,6 @@ function App() {
           </button>
         </div>
 
-        {/* Mobile navigation */}
         {mobileMenuOpen && (
           <div className="border-t border-sky-100 bg-white px-5 py-5 md:hidden">
             <nav className="flex flex-col gap-4">
@@ -200,28 +196,24 @@ function App() {
                 Member Login
               </a>
 
-              <a
-                href="/register"
+              <Link
+                to="/register"
+                onClick={() => setMobileMenuOpen(false)}
                 className="rounded-xl bg-sky-600 px-4 py-3 text-center font-bold text-white"
               >
                 Register Now
-              </a>
+              </Link>
             </nav>
           </div>
         )}
       </header>
 
       <main>
-        {/* =========================
-            HERO SECTION
-        ========================== */}
         <section className="relative overflow-hidden">
           <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-sky-200/50 blur-3xl" />
-
           <div className="absolute -bottom-40 -left-32 h-96 w-96 rounded-full bg-blue-200/40 blur-3xl" />
 
           <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-5 py-20 sm:px-8 lg:grid-cols-2 lg:py-28">
-            {/* Hero content */}
             <div>
               <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wider text-sky-700 shadow-sm">
                 <Sparkles size={15} />
@@ -230,9 +222,7 @@ function App() {
 
               <h1 className="max-w-3xl text-4xl font-black leading-tight tracking-tight text-slate-900 sm:text-5xl lg:text-6xl">
                 Growing together in
-                <span className="block text-sky-600">
-                  faith and service.
-                </span>
+                <span className="block text-sky-600">faith and service.</span>
               </h1>
 
               <p className="mt-6 max-w-xl text-base leading-8 text-slate-600 sm:text-lg">
@@ -243,13 +233,13 @@ function App() {
               </p>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <a
-                  href="/register"
+                <Link
+                  to="/register"
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-6 py-3.5 font-bold text-white shadow-lg shadow-sky-200 transition hover:bg-sky-700"
                 >
                   Start Your Registration
                   <ArrowRight size={18} />
-                </a>
+                </Link>
 
                 <a
                   href="#programs"
@@ -273,7 +263,6 @@ function App() {
               </div>
             </div>
 
-            {/* Hero visual */}
             <div className="relative">
               <div className="absolute -inset-5 rounded-[2rem] bg-gradient-to-br from-sky-200/70 to-blue-100/20 blur-2xl" />
 
@@ -302,22 +291,14 @@ function App() {
                   <div className="mt-8 grid grid-cols-2 gap-3">
                     <div className="rounded-2xl bg-white/10 p-4 backdrop-blur">
                       <Users size={20} className="text-sky-100" />
-
                       <p className="mt-3 text-sm font-bold">Community</p>
-
-                      <p className="mt-1 text-xs text-sky-100">
-                        Connect and belong
-                      </p>
+                      <p className="mt-1 text-xs text-sky-100">Connect and belong</p>
                     </div>
 
                     <div className="rounded-2xl bg-white/10 p-4 backdrop-blur">
                       <Heart size={20} className="text-sky-100" />
-
                       <p className="mt-3 text-sm font-bold">Service</p>
-
-                      <p className="mt-1 text-xs text-sky-100">
-                        Live your purpose
-                      </p>
+                      <p className="mt-1 text-xs text-sky-100">Live your purpose</p>
                     </div>
                   </div>
                 </div>
@@ -327,7 +308,6 @@ function App() {
                     <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
                       One connected community
                     </p>
-
                     <p className="mt-1 text-sm font-semibold text-slate-700">
                       Empowering young people
                     </p>
@@ -342,9 +322,6 @@ function App() {
           </div>
         </section>
 
-        {/* =========================
-            ABOUT / BENEFITS SECTION
-        ========================== */}
         <section id="about" className="bg-white py-20">
           <div className="mx-auto max-w-7xl px-5 sm:px-8">
             <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
@@ -392,9 +369,6 @@ function App() {
           </div>
         </section>
 
-        {/* =========================
-            PROGRAMS SECTION
-        ========================== */}
         <section id="programs" className="bg-sky-50 py-20">
           <div className="mx-auto max-w-7xl px-5 sm:px-8">
             <div className="mx-auto max-w-2xl text-center">
@@ -412,7 +386,6 @@ function App() {
               </p>
             </div>
 
-            {/* Colourful program cards */}
             <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {programs.map((program) => {
                 const Icon = program.icon
@@ -422,43 +395,36 @@ function App() {
                     key={program.title}
                     className={`group relative overflow-hidden rounded-3xl border p-6 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl ${program.cardColor}`}
                   >
-                    {/* Coloured top accent */}
                     <div
                       className={`absolute left-0 right-0 top-0 h-1.5 ${program.accentColor}`}
                     />
 
-                    {/* Program icon */}
                     <div
                       className={`flex h-14 w-14 items-center justify-center rounded-2xl shadow-sm ${program.color}`}
                     >
                       <Icon size={25} strokeWidth={2.2} />
                     </div>
 
-                    {/* Program title */}
                     <h3 className="mt-5 text-lg font-black text-slate-900">
                       {program.title}
                     </h3>
 
-                    {/* Program description */}
                     <p className="mt-3 text-sm leading-7 text-slate-600">
                       {program.description}
                     </p>
 
-                    {/* Program action */}
-                    <a
-                      href="/register"
+                    <Link
+                      to={`/register?programId=${program.title === 'Youth in Parishes' ? 8 : program.title === 'Junior Youth' ? 9 : program.title === 'NICCA' ? 10 : program.title === 'Secondary School Youth' ? 11 : program.title === 'Career Guidance' ? 12 : 13}`}
                       className="relative z-10 mt-5 inline-flex items-center gap-1 text-sm font-bold text-slate-700 transition group-hover:gap-2"
                     >
                       Join this program
                       <ArrowRight size={16} />
-                    </a>
+                    </Link>
 
-                    {/* Decorative circle */}
                     <div
                       className={`pointer-events-none absolute -bottom-8 -right-8 h-28 w-28 rounded-full opacity-30 transition duration-300 group-hover:scale-125 ${program.accentColor}`}
                     />
 
-                    {/* Secondary decorative circle */}
                     <div
                       className={`pointer-events-none absolute -right-12 top-16 h-20 w-20 rounded-full opacity-10 ${program.accentColor}`}
                     />
@@ -469,14 +435,10 @@ function App() {
           </div>
         </section>
 
-        {/* =========================
-            CALL TO ACTION SECTION
-        ========================== */}
         <section className="bg-white py-20">
           <div className="mx-auto max-w-5xl px-5 sm:px-8">
             <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-r from-sky-600 to-blue-700 px-6 py-12 text-center text-white shadow-xl shadow-sky-200 sm:px-12">
               <div className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-white/10" />
-
               <div className="absolute -bottom-24 -left-16 h-64 w-64 rounded-full bg-white/10" />
 
               <div className="relative">
@@ -491,26 +453,22 @@ function App() {
                   programs, and the wider youth community.
                 </p>
 
-                <a
-                  href="/register"
+                <Link
+                  to="/register"
                   className="mt-8 inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3.5 font-bold text-sky-700 transition hover:bg-sky-50"
                 >
                   Register as a Member
                   <ArrowRight size={18} />
-                </a>
+                </Link>
               </div>
             </div>
           </div>
         </section>
       </main>
 
-      {/* =========================
-          FOOTER
-      ========================== */}
       <footer id="contact" className="bg-slate-950 py-12 text-slate-300">
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
           <div className="grid gap-10 md:grid-cols-3">
-            {/* Footer brand */}
             <div>
               <div className="flex items-center gap-3">
                 <div className="rounded-xl bg-sky-600 p-2.5 text-white">
@@ -518,10 +476,7 @@ function App() {
                 </div>
 
                 <div>
-                  <p className="font-bold text-white">
-                    Archdiocese of Nyeri
-                  </p>
-
+                  <p className="font-bold text-white">Archdiocese of Nyeri</p>
                   <p className="text-xs text-slate-400">Youth Hub</p>
                 </div>
               </div>
@@ -532,7 +487,6 @@ function App() {
               </p>
             </div>
 
-            {/* Footer links */}
             <div>
               <h3 className="font-bold text-white">Quick Links</h3>
 
@@ -544,12 +498,9 @@ function App() {
                   Youth Programs
                 </a>
 
-                <a
-                  href="/register"
-                  className="transition hover:text-sky-400"
-                >
+                <Link to="/register" className="transition hover:text-sky-400">
                   Member Registration
-                </a>
+                </Link>
 
                 <a href="/login" className="transition hover:text-sky-400">
                   Member Login
@@ -557,7 +508,6 @@ function App() {
               </div>
             </div>
 
-            {/* Footer values */}
             <div>
               <h3 className="font-bold text-white">Our Values</h3>
 
@@ -576,6 +526,16 @@ function App() {
         </div>
       </footer>
     </div>
+  )
+}
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/admin" element={<AdminPage />} />
+    </Routes>
   )
 }
 

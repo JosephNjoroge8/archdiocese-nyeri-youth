@@ -16,6 +16,7 @@ class MemberRegistrationTest extends TestCase
     use RefreshDatabase;
 
     private int $localChurchId;
+
     private int $programId;
 
     protected function setUp(): void
@@ -222,6 +223,40 @@ class MemberRegistrationTest extends TestCase
                 'program_id',
                 'password',
             ]);
+
+        $this->assertDatabaseCount('members', 0);
+        $this->assertDatabaseCount('users', 0);
+    }
+
+    public function test_registration_rejects_inactive_programs(): void
+    {
+        Program::query()->whereKey($this->programId)->update(['is_active' => false]);
+
+        $response = $this->postJson(
+            '/api/v1/members',
+            $this->registrationPayload()
+        );
+
+        $response
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['program_id']);
+
+        $this->assertDatabaseCount('members', 0);
+        $this->assertDatabaseCount('users', 0);
+    }
+
+    public function test_registration_rejects_inactive_local_churches(): void
+    {
+        LocalChurch::query()->whereKey($this->localChurchId)->update(['is_active' => false]);
+
+        $response = $this->postJson(
+            '/api/v1/members',
+            $this->registrationPayload()
+        );
+
+        $response
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['local_church_id']);
 
         $this->assertDatabaseCount('members', 0);
         $this->assertDatabaseCount('users', 0);
