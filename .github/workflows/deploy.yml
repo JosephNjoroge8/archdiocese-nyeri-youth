@@ -71,6 +71,7 @@ jobs:
         with:
           name: frontend-dist
           path: frontend/dist
+          include-hidden-files: true
           if-no-files-found: error
 
   deploy-backend:
@@ -114,7 +115,6 @@ jobs:
           password: ${{ secrets.CPANEL_SSH_PASSWORD }}
           port: ${{ secrets.CPANEL_SSH_PORT || 22 }}
           envs: BACKEND_DIR
-          script_stop: true
           script: |
             set -e
             cd "$BACKEND_DIR"
