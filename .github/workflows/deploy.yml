@@ -65,7 +65,7 @@ jobs:
   deploy:
     name: Build production branch and deploy
     needs: test
-    if: github.event_name == 'push' && vars.CPANEL_DEPLOY_ENABLED == 'true'
+    if: github.ref == 'refs/heads/Main' && vars.CPANEL_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: production
     permissions:
