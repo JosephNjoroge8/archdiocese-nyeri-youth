@@ -17,6 +17,7 @@ class User extends Authenticatable
         'username',
         'email',
         'password',
+        'password_is_temporary',
     ];
 
     protected $hidden = [
@@ -30,6 +31,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_admin' => 'boolean',
+            'password_is_temporary' => 'boolean',
         ];
     }
 

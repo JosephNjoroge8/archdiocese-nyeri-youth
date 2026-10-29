@@ -1,0 +1,21 @@
+deployment:
+  tasks:
+    - >-
+      /bin/bash -c 'set -eu;
+      LARAVEL_DIR="/home/REPLACE_WITH_CPANEL_USER/laravel-api";
+      FRONTEND_DIR="/home/REPLACE_WITH_CPANEL_USER/public_html";
+      case "$LARAVEL_DIR $FRONTEND_DIR" in
+        *REPLACE_WITH_CPANEL_USER*)
+          echo "Replace the cPanel deployment paths in .cpanel.yml before deploying." >&2;
+          exit 1
+          ;;
+      esac;
+      /bin/mkdir -p "$LARAVEL_DIR" "$FRONTEND_DIR";
+      /bin/cp -R backend/. "$LARAVEL_DIR/";
+      /bin/cp -R frontend/dist/. "$FRONTEND_DIR/";
+      cd "$LARAVEL_DIR";
+      php artisan migrate --force;
+      php artisan optimize:clear;
+      php artisan config:cache;
+      php artisan route:cache;
+      php artisan view:cache'
