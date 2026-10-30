@@ -11,7 +11,7 @@ The repository workflow is [`.github/workflows/deploy.yml`](../../.github/workfl
 
 1. Point `system.quovadisyouthhub.org` at the cPanel account and set its document root to `/home/shemidig7/laravel-api/public`. Do not use `public_html` for this domain.
 2. Create a MySQL database named `shemidig7_youthhub` and database user `shemidig7_youthhub` in cPanel. Grant the user all required privileges and record its password for the server `.env`.
-3. Confirm the cPanel account's CLI PHP version is PHP 8.3 or newer and that `php` is available to cPanel deployment tasks.
+3. Confirm the cPanel account's CLI PHP version is PHP 8.4.1 or newer and that `php` is available to cPanel deployment tasks.
 4. In cPanel Git Version Control, clone the repository into a path such as `/home/shemidig7/repositories/archdiocese-nyeri-youth` and select the `production` branch. Record that full repository path for the `CPANEL_REPO_PATH` secret.
 5. Set writable permissions for `/home/shemidig7/laravel-api/storage/` and `/home/shemidig7/laravel-api/bootstrap/cache/` in cPanel File Manager.
 6. Create `/home/shemidig7/laravel-api/.env` using cPanel File Manager. It must not be committed or copied from the repository.
