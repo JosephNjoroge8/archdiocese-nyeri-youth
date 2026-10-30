@@ -1,36 +1,35 @@
-name: Deploy production
+name: CI/CD
 
 on:
   push:
     branches:
       - Main
+  pull_request:
+    branches:
+      - Main
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 concurrency:
-  group: production-deployment
+  group: production-deploy
   cancel-in-progress: false
 
 jobs:
-  verify:
-    name: Verify application
-    timeout-minutes: 20
+  test:
+    name: Test and build
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Check out source
         uses: actions/checkout@v4
 
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
-          extensions: mbstring, bcmath, intl, pdo_mysql, zip
+          php-version: '8.4'
+          extensions: mbstring, bcmath, pdo_mysql, sqlite3, xml, intl
           tools: composer:v2
           coverage: none
 
-      - name: Install PHP dependencies
+      - name: Install backend dependencies
         working-directory: backend
         run: composer install --no-interaction --prefer-dist --no-progress
 
@@ -40,13 +39,11 @@ jobs:
           APP_ENV: testing
           APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
           DB_CONNECTION: sqlite
-          DB_DATABASE: database/database.sqlite
+          DB_DATABASE: ':memory:'
           CACHE_STORE: array
           SESSION_DRIVER: array
           QUEUE_CONNECTION: sync
-        run: |
-          touch database/database.sqlite
-          php artisan test
+        run: php artisan test
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -62,136 +59,115 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         env:
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+          VITE_API_BASE_URL: https://api.example.invalid
         run: npm run build
 
-      - name: Upload frontend artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend/dist
-          include-hidden-files: true
-          if-no-files-found: error
-
-  deploy-backend:
-    name: Deploy Laravel API
-    needs: verify
-    timeout-minutes: 20
+  deploy:
+    name: Build production branch and deploy
+    needs: test
+    if: github.ref == 'refs/heads/Main' && vars.CPANEL_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: write
     steps:
-      - name: Checkout
+      - name: Check out source
         uses: actions/checkout@v4
-
-      - name: Upload Laravel application
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server: ${{ secrets.CPANEL_FTP_SERVER }}
-          username: ${{ secrets.CPANEL_FTP_USERNAME }}
-          password: ${{ secrets.CPANEL_FTP_PASSWORD }}
-          server-dir: ${{ secrets.CPANEL_BACKEND_DIR }}
-          local-dir: ./backend/
-          exclude: |
-            **/.env
-            **/.env.*
-            **/vendor/**
-            **/node_modules/**
-            **/storage/logs/**
-            **/storage/framework/cache/**
-            **/storage/framework/sessions/**
-            **/storage/framework/views/**
-            **/tests/**
-            **/.phpunit.result.cache
-            **/public/build/**
+          ref: Main
+          path: src
 
-      - name: Install dependencies and migrate
-        uses: appleboy/ssh-action@v1.2.2
-        env:
-          BACKEND_DIR: ${{ secrets.CPANEL_BACKEND_DIR }}
+      - name: Check out production branch
+        uses: actions/checkout@v4
         with:
-          host: ${{ secrets.CPANEL_SSH_HOST }}
-          username: ${{ secrets.CPANEL_SSH_USERNAME }}
-          password: ${{ secrets.CPANEL_SSH_PASSWORD }}
-          port: ${{ secrets.CPANEL_SSH_PORT || 22 }}
-          envs: BACKEND_DIR
-          script: |
-            set -e
-            cd "$BACKEND_DIR"
+          ref: production
+          path: prod
+          fetch-depth: 0
 
-            if [ ! -f .env ]; then
-              echo "Missing server .env in $BACKEND_DIR"
-              exit 1
-            fi
-
-            composer_bin="$(command -v composer || true)"
-            if [ -z "$composer_bin" ]; then
-              for candidate in /opt/cpanel/composer/bin/composer /usr/local/bin/composer /usr/bin/composer; do
-                if [ -x "$candidate" ]; then
-                  composer_bin="$candidate"
-                  break
-                fi
-              done
-            fi
-
-            if [ -z "$composer_bin" ]; then
-              echo "Composer is not available on the target server"
-              exit 1
-            fi
-
-            "$composer_bin" install --no-dev --no-interaction --prefer-dist --optimize-autoloader
-            php artisan migrate --force
-            php artisan db:seed --class=ProgramSeeder --force
-            php artisan db:seed --class=ProgramFormFieldSeeder --force
-            php artisan storage:link || true
-            php artisan optimize:clear
-            php artisan config:cache
-            php artisan route:cache
-            php artisan view:cache
-
-  deploy-frontend:
-    name: Deploy frontend
-    needs: [verify, deploy-backend]
-    timeout-minutes: 15
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download frontend artifact
-        uses: actions/download-artifact@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
         with:
-          name: frontend-dist
-          path: frontend-dist
+          php-version: '8.4'
+          extensions: mbstring, bcmath, pdo_mysql, sqlite3, xml, intl
+          tools: composer:v2
+          coverage: none
 
-      - name: Upload frontend
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
-          server: ${{ secrets.CPANEL_FTP_SERVER }}
-          username: ${{ secrets.CPANEL_FTP_USERNAME }}
-          password: ${{ secrets.CPANEL_FTP_PASSWORD }}
-          server-dir: ${{ secrets.CPANEL_FRONTEND_DIR }}
-          local-dir: ./frontend-dist/
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
 
-  smoke-test:
-    name: Smoke test production
-    needs: deploy-frontend
-    timeout-minutes: 15
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check Laravel health endpoint
+      - name: Build backend and frontend
+        working-directory: src
         env:
-          APP_URL: ${{ secrets.APP_URL }}
-        run: curl --fail --silent --show-error --max-time 30 "$APP_URL/up"
-
-      - name: Check public program catalog
-        env:
-          API_URL: ${{ secrets.VITE_API_BASE_URL }}
-        run: curl --fail --silent --show-error --max-time 30 "$API_URL/api/v1/programs"
-
-      - name: Check admin portal route
-        env:
-          FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
-        run: curl --fail --silent --show-error --max-time 30 "$FRONTEND_URL/admin"
-
-      - name: Check admin API authorization
-        env:
-          API_URL: ${{ secrets.VITE_API_BASE_URL }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
         run: |
-          status=$(curl --silent --show-error --max-time 30 --output /dev/null --write-out '%{http_code}' "$API_URL/api/v1/admin/registrations")
-          test "$status" = "401"
+          composer install \
+            --working-dir=backend \
+            --no-dev \
+            --optimize-autoloader \
+            --no-interaction \
+            --prefer-dist \
+            --no-progress
+          npm ci --prefix frontend
+          npm run build --prefix frontend
+
+      - name: Sync build into production branch
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          rsync -a --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.gitignore' \
+            --exclude='node_modules' \
+            --exclude='tests' \
+            --exclude='.env' \
+            src/ prod/
+
+          printf '.env\n**/.env\n**/storage/logs/*.log\n' > prod/.gitignore
+          cd prod
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git add -f backend/vendor frontend/dist
+          if ! git diff --cached --quiet; then
+            git commit -m "Deploy ${SOURCE_SHA:0:7}"
+            git push origin production
+          fi
+
+      - name: Trigger cPanel update and deployment
+        env:
+          CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
+          CPANEL_USER: ${{ secrets.CPANEL_USER }}
+          CPANEL_API_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
+          CPANEL_REPO_PATH: ${{ secrets.CPANEL_REPO_PATH }}
+        run: |
+          set -euo pipefail
+
+          : "${CPANEL_HOST:?Configure CPANEL_HOST in the production environment}"
+          : "${CPANEL_USER:?Configure CPANEL_USER in the production environment}"
+          : "${CPANEL_API_TOKEN:?Configure CPANEL_API_TOKEN in the production environment}"
+          : "${CPANEL_REPO_PATH:?Configure CPANEL_REPO_PATH in the production environment}"
+
+          auth="Authorization: cpanel ${CPANEL_USER}:${CPANEL_API_TOKEN}"
+          base="https://${CPANEL_HOST}:2083/execute"
+
+          echo "Updating the production repository..."
+          update_response=$(curl --fail --silent --show-error \
+            --get \
+            --header "$auth" \
+            --data-urlencode "repository_root=${CPANEL_REPO_PATH}" \
+            --data-urlencode "branch=production" \
+            "${base}/VersionControl/update")
+          echo "$update_response" | jq --exit-status '.status == 1' > /dev/null
+
+          echo "Running the cPanel deployment tasks..."
+          deploy_response=$(curl --fail --silent --show-error \
+            --get \
+            --header "$auth" \
+            --data-urlencode "repository_root=${CPANEL_REPO_PATH}" \
+            "${base}/VersionControlDeployment/create")
+          echo "$deploy_response" | jq --exit-status '.status == 1' > /dev/null

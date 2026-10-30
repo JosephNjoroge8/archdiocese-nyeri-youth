@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\MemberProgramEnrollment;
+use App\Services\MemberSetupLinkService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class AdminRegistrationController extends Controller
 {
@@ -63,6 +65,7 @@ class AdminRegistrationController extends Controller
                     'email' => $registration->member->email,
                     'local_church' => $registration->member->localChurch->name,
                     'parish' => $registration->member->localChurch->parish->name,
+                    'password_setup_pending' => $registration->member->user->password_is_temporary,
                 ],
             ]),
             'meta' => [
@@ -70,6 +73,21 @@ class AdminRegistrationController extends Controller
                 'last_page' => $registrations->lastPage(),
                 'total' => $registrations->total(),
             ],
+        ]);
+    }
+
+    public function createSetupLink(
+        MemberProgramEnrollment $registration,
+        MemberSetupLinkService $memberSetupLinkService,
+    ): JsonResponse {
+        $user = $registration->member()->with('user')->firstOrFail()->user;
+
+        if (! $user->password_is_temporary) {
+            throw new HttpException(409, 'This member has already set a password.');
+        }
+
+        return response()->json([
+            'setup_url' => $memberSetupLinkService->create($user),
         ]);
     }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { LogOut, Search, ShieldCheck } from 'lucide-react'
+import { Download, FileSpreadsheet, LogOut, Search, ShieldCheck, Upload } from 'lucide-react'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || (
   import.meta.env.DEV ? 'http://localhost:8001' : window.location.origin
@@ -19,10 +19,46 @@ type Registration = {
     email: string | null
     local_church: string
     parish: string
+    password_setup_pending: boolean
   }
 }
 
 type ApiError = { message?: string; errors?: Record<string, string[]> }
+type Program = { id: number; name: string }
+type ProgramField = { field_key: string; label: string; is_required: boolean }
+type PreviewRow = {
+  row: number
+  values: Record<string, string | null>
+  valid: boolean
+  errors: Record<string, string[]>
+}
+type ImportResult = {
+  data: Array<{
+    row: number
+    full_name: string
+    username: string
+    membership_no: string
+    registration_id: number
+    setup_url: string
+  }>
+  meta: { imported: number; skipped: number; total: number }
+  skipped_rows: PreviewRow[]
+}
+
+const sharedColumns = ['full_name', 'username', 'phone', 'email', 'gender', 'dob', 'local_church_id']
+
+function downloadCsv(filename: string, rows: string[][]) {
+  const contents = rows.map((row) => row.map((value) => {
+    const safeValue = /^[\s]*[=+\-@]/.test(value) ? `'${value}` : value
+    return `"${safeValue.replaceAll('"', '""')}"`
+  }).join(',')).join('\r\n')
+  const url = URL.createObjectURL(new Blob([contents], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
 
 export default function AdminPage() {
   const [token, setToken] = useState(() => localStorage.getItem(tokenKey) ?? '')
@@ -34,6 +70,17 @@ export default function AdminPage() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [programs, setPrograms] = useState<Program[]>([])
+  const [selectedProgramId, setSelectedProgramId] = useState('')
+  const [loadedProgramFields, setLoadedProgramFields] = useState<{ programId: string; fields: ProgramField[] } | null>(null)
+  const [csvFile, setCsvFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<{ previewId: string; rows: PreviewRow[]; meta: { total: number; valid: number; invalid: number } } | null>(null)
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const [bulkLoading, setBulkLoading] = useState(false)
+  const [setupLinks, setSetupLinks] = useState<Record<number, string>>({})
+  const programFields = loadedProgramFields?.programId === selectedProgramId
+    ? loadedProgramFields.fields
+    : []
 
   const loadRegistrations = useCallback(async () => {
     if (!token) return
@@ -70,8 +117,47 @@ export default function AdminPage() {
   }, [search, statusFilter, token])
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect
     if (token) void loadRegistrations()
   }, [token, loadRegistrations])
+
+  useEffect(() => {
+    let active = true
+    void fetch(`${apiBaseUrl}/api/v1/programs`, { headers: { Accept: 'application/json' } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Unable to load programs.')
+        return await response.json() as { data: Program[] }
+      })
+      .then((result) => {
+        if (!active) return
+        // oxlint-disable-next-line react/set-state-in-effect
+        setPrograms(result.data)
+        if (result.data.length > 0) setSelectedProgramId(String(result.data[0].id))
+      })
+      .catch((loadError: unknown) => {
+        if (active) setError(loadError instanceof Error ? loadError.message : 'Unable to load programs.')
+      })
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    if (!selectedProgramId) return
+    let active = true
+    void fetch(`${apiBaseUrl}/api/v1/programs/${selectedProgramId}/form-fields`, {
+      headers: { Accept: 'application/json' },
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Unable to load program import fields.')
+        return await response.json() as { fields: ProgramField[] }
+      })
+      .then((result) => {
+        if (active) setLoadedProgramFields({ programId: selectedProgramId, fields: result.fields })
+      })
+      .catch((loadError: unknown) => {
+        if (active) setError(loadError instanceof Error ? loadError.message : 'Unable to load program import fields.')
+      })
+    return () => { active = false }
+  }, [selectedProgramId])
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -123,10 +209,101 @@ export default function AdminPage() {
     }
   }
 
+  async function submitBulk(action: 'preview' | 'import') {
+    if (!token || !selectedProgramId || !csvFile) return
+    setBulkLoading(true)
+    setError('')
+
+    try {
+      const formData = new FormData()
+      formData.append('program_id', selectedProgramId)
+      formData.append('file', csvFile)
+      if (action === 'import' && preview?.previewId) {
+        formData.append('preview_id', preview.previewId)
+      }
+      const response = await fetch(`${apiBaseUrl}/api/v1/admin/bulk-registrations/${action}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+        body: formData,
+      })
+      const result = await response.json() as ApiError & {
+        rows?: PreviewRow[]
+        meta?: ImportResult['meta'] & { valid?: number; invalid?: number }
+        preview_id?: string
+        data?: ImportResult['data']
+        skipped_rows?: PreviewRow[]
+      }
+      if (!response.ok) {
+        throw new Error(result.errors?.file?.[0] ?? result.errors?.program_id?.[0] ?? result.message ?? 'Bulk registration failed.')
+      }
+
+      if (action === 'preview' && result.rows && result.meta && result.preview_id) {
+        setPreview({
+          previewId: result.preview_id,
+          rows: result.rows,
+          meta: {
+            total: result.meta.total,
+            valid: result.meta.valid ?? 0,
+            invalid: result.meta.invalid ?? 0,
+          },
+        })
+        setImportResult(null)
+      } else if (action === 'import' && result.data && result.meta) {
+        const imported = {
+          data: result.data,
+          meta: result.meta,
+          skipped_rows: result.skipped_rows ?? [],
+        }
+        setImportResult(imported)
+        setPreview(null)
+        setCsvFile(null)
+        const input = document.getElementById('bulk-registration-file') as HTMLInputElement | null
+        if (input) input.value = ''
+        await loadRegistrations()
+      }
+    } catch (bulkError) {
+      setError(bulkError instanceof Error ? bulkError.message : 'Bulk registration failed.')
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
+  async function regenerateSetupLink(registrationId: number) {
+    setError('')
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/v1/admin/registrations/${registrationId}/setup-link`,
+        { method: 'POST', headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } },
+      )
+      const result = await response.json() as ApiError & { setup_url?: string }
+      if (!response.ok || !result.setup_url) {
+        throw new Error(result.message ?? 'Unable to create a password setup link.')
+      }
+      setSetupLinks((current) => ({ ...current, [registrationId]: result.setup_url! }))
+    } catch (linkError) {
+      setError(linkError instanceof Error ? linkError.message : 'Unable to create a password setup link.')
+    }
+  }
+
+  function downloadSetupLinks() {
+    if (!importResult) return
+    downloadCsv('member-password-setup-links.csv', [
+      ['full_name', 'username', 'membership_no', 'setup_url'],
+      ...importResult.data.map((member) => [
+        member.full_name,
+        member.username,
+        member.membership_no,
+        member.setup_url,
+      ]),
+    ])
+  }
+
   function signOut() {
     localStorage.removeItem(tokenKey)
     setToken('')
     setRegistrations([])
+    setImportResult(null)
+    setSetupLinks({})
     setError('')
   }
 
@@ -161,6 +338,150 @@ export default function AdminPage() {
             <button disabled={loading} className="mt-6 w-full rounded-lg bg-sky-600 px-4 py-3 font-bold text-white hover:bg-sky-700 disabled:opacity-60">{loading ? 'Signing in…' : 'Sign in'}</button>
           </form>
         ) : (
+          <div className="space-y-6">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl bg-emerald-100 p-3 text-emerald-700"><FileSpreadsheet size={22} /></div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Bulk registration</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  Upload a CSV to validate member rows, preview errors, then import valid rows. Imports create accounts with temporary credentials and pending program registrations.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-sm font-semibold">
+                  Program
+                  <select
+                    value={selectedProgramId}
+                    onChange={(event) => {
+                      setSelectedProgramId(event.target.value)
+                      setPreview(null)
+                      setImportResult(null)
+                    }}
+                    className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal"
+                  >
+                    {programs.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}
+                  </select>
+                </label>
+                <label className="block text-sm font-semibold">
+                  CSV file
+                  <input
+                    id="bulk-registration-file"
+                    type="file"
+                    accept=".csv,text/csv"
+                    onChange={(event) => {
+                      setCsvFile(event.target.files?.[0] ?? null)
+                      setPreview(null)
+                      setImportResult(null)
+                    }}
+                    className="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal"
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                disabled={!selectedProgramId || programs.length === 0}
+                onClick={() => downloadCsv('member-registration-template.csv', [[...sharedColumns, ...programFields.map((field) => field.field_key)]])}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50"
+              >
+                <Download size={16} /> Download template
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Required columns: full_name, username, local_church_id, plus any selected-program fields configured as required. Optional shared columns: phone, email, gender, dob. Email and phone may be shared; usernames must be unique. CSV only, up to 5 MB and 500 rows.
+            </p>
+
+            <div className="mt-5 flex flex-wrap gap-3">
+              <button
+                type="button"
+                disabled={!csvFile || !selectedProgramId || bulkLoading}
+                onClick={() => void submitBulk('preview')}
+                className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-900 disabled:opacity-50"
+              >
+                <Search size={16} /> {bulkLoading ? 'Working…' : 'Validate and preview'}
+              </button>
+              {preview && preview.meta.valid > 0 && (
+                <button
+                  type="button"
+                  disabled={bulkLoading}
+                  onClick={() => void submitBulk('import')}
+                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  <Upload size={16} /> Import {preview.meta.valid} valid row{preview.meta.valid === 1 ? '' : 's'}
+                </button>
+              )}
+            </div>
+
+            {preview && (
+              <div className="mt-5">
+                <p className="mb-3 text-sm font-semibold text-slate-700">
+                  Preview: {preview.meta.valid} valid, {preview.meta.invalid} invalid of {preview.meta.total} rows. The server revalidates before import.
+                </p>
+                <div className="max-h-80 overflow-auto rounded-lg border border-slate-200">
+                  <table className="w-full min-w-[620px] text-left text-sm">
+                    <thead className="sticky top-0 bg-slate-50 text-xs uppercase text-slate-500">
+                      <tr><th className="px-3 py-2">CSV row</th><th className="px-3 py-2">Name</th><th className="px-3 py-2">Username</th><th className="px-3 py-2">Result</th><th className="px-3 py-2">Errors</th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {preview.rows.map((row) => (
+                        <tr key={row.row} className="align-top">
+                          <td className="px-3 py-2">{row.row}</td>
+                          <td className="px-3 py-2">{row.values.full_name ?? '—'}</td>
+                          <td className="px-3 py-2">{row.values.username ?? '—'}</td>
+                          <td className={`px-3 py-2 font-semibold ${row.valid ? 'text-emerald-700' : 'text-rose-700'}`}>{row.valid ? 'Valid' : 'Invalid'}</td>
+                          <td className="px-3 py-2 text-rose-700">
+                            {Object.entries(row.errors).flatMap(([field, messages]) => messages.map((message) => `${field}: ${message}`)).join('; ') || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {importResult && (
+              <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-bold text-emerald-900">Imported {importResult.meta.imported} of {importResult.meta.total} rows</h3>
+                    <p className="mt-1 text-sm text-emerald-800">
+                      {importResult.meta.skipped} invalid rows were skipped. Setup links expire in 7 days and can only be used once. Distribute them securely; they are not emailed.
+                    </p>
+                  </div>
+                  {importResult.data.length > 0 && (
+                    <button type="button" onClick={downloadSetupLinks} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-800">
+                      <Download size={16} /> Download setup links
+                    </button>
+                  )}
+                </div>
+                {importResult.data.length > 0 && (
+                  <ul className="mt-4 space-y-2 text-sm">
+                    {importResult.data.map((member) => (
+                      <li key={member.registration_id} className="break-all">
+                        <span className="font-semibold">{member.full_name} (@{member.username}):</span>{' '}
+                        <a href={member.setup_url} target="_blank" rel="noreferrer" className="text-sky-800 underline">Open one-time setup link</a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {importResult.skipped_rows.length > 0 && (
+                  <details className="mt-4 text-sm text-rose-900">
+                    <summary className="cursor-pointer font-semibold">Skipped rows and errors</summary>
+                    <ul className="mt-2 space-y-1">
+                      {importResult.skipped_rows.map((row) => (
+                        <li key={row.row}>Row {row.row}: {Object.entries(row.errors).flatMap(([field, messages]) => messages.map((message) => `${field}: ${message}`)).join('; ')}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            )}
+          </section>
+
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-col gap-4 border-b border-slate-200 p-5 sm:flex-row sm:items-end sm:justify-between">
               <div>
@@ -187,9 +508,9 @@ export default function AdminPage() {
               <p className="p-8 text-center text-sm text-slate-500">No registrations match these filters.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[850px] text-left text-sm">
+                <table className="w-full min-w-[1000px] text-left text-sm">
                   <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                    <tr><th className="px-5 py-3">Applicant</th><th className="px-5 py-3">Program</th><th className="px-5 py-3">Church / Parish</th><th className="px-5 py-3">Registered</th><th className="px-5 py-3">Status</th><th className="px-5 py-3">Review</th></tr>
+                    <tr><th className="px-5 py-3">Applicant</th><th className="px-5 py-3">Program</th><th className="px-5 py-3">Church / Parish</th><th className="px-5 py-3">Registered</th><th className="px-5 py-3">Status</th><th className="px-5 py-3">Review</th><th className="px-5 py-3">Account setup</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {registrations.map((registration) => (
@@ -210,6 +531,20 @@ export default function AdminPage() {
                             <option value="rejected">Rejected</option>
                           </select>
                         </td>
+                        <td className="px-5 py-4">
+                          {registration.member.password_setup_pending ? (
+                            <div>
+                              <button type="button" onClick={() => void regenerateSetupLink(registration.id)} className="rounded-lg border border-sky-200 px-3 py-2 text-xs font-semibold text-sky-800 hover:bg-sky-50">
+                                Generate setup link
+                              </button>
+                              {setupLinks[registration.id] && (
+                                <p className="mt-2 max-w-56 break-all text-xs">
+                                  <a href={setupLinks[registration.id]} target="_blank" rel="noreferrer" className="text-sky-800 underline">Open one-time link</a>
+                                </p>
+                              )}
+                            </div>
+                          ) : <span className="text-xs text-slate-500">Password set</span>}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -217,6 +552,7 @@ export default function AdminPage() {
               </div>
             )}
           </section>
+          </div>
         )}
       </div>
     </main>

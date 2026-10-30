@@ -1,0 +1,25 @@
+deployment:
+  tasks:
+    - >-
+      /bin/bash -c 'set -eu;
+      LARAVEL_DIR="/home/shemidig7/laravel-api";
+      FRONTEND_DIR="$LARAVEL_DIR/public";
+      FRONTEND_BUILD="frontend/dist";
+      if [ ! -f "$FRONTEND_BUILD/index.html" ]; then
+        echo "Frontend build missing: $FRONTEND_BUILD/index.html. Deploy from the production branch after CI builds frontend/dist." >&2;
+        exit 1;
+      fi;
+      if [ ! -f "backend/public/index.php" ]; then
+        echo "Laravel public entry point missing: backend/public/index.php." >&2;
+        exit 1;
+      fi;
+      /bin/mkdir -p "$LARAVEL_DIR" "$FRONTEND_DIR";
+      /bin/cp -R backend/. "$LARAVEL_DIR/";
+      /bin/cp -R "$FRONTEND_BUILD/." "$FRONTEND_DIR/";
+      /bin/cp backend/public/.htaccess "$FRONTEND_DIR/.htaccess";
+      cd "$LARAVEL_DIR";
+      php artisan migrate --force;
+      php artisan optimize:clear;
+      php artisan config:cache;
+      php artisan route:cache;
+      php artisan view:cache'

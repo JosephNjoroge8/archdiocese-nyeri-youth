@@ -16,6 +16,8 @@ import { useState } from 'react'
 import { Link, Route, Routes } from 'react-router-dom'
 import RegisterPage from './pages/RegisterPage'
 import AdminPage from './pages/AdminPage'
+import SetPasswordPage from './pages/SetPasswordPage'
+import MemberLoginPage from './pages/MemberLoginPage'
 
 const programs = [
   {
@@ -535,6 +537,8 @@ function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/admin" element={<AdminPage />} />
+      <Route path="/login" element={<MemberLoginPage />} />
+      <Route path="/set-password" element={<SetPasswordPage />} />
     </Routes>
   )
 }
