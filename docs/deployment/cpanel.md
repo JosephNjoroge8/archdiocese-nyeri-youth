@@ -1,27 +1,20 @@
 # cPanel Deployment
 
-This project deploys as two public surfaces:
+This cPanel setup serves the frontend and Laravel API from one domain:
 
-- The Vite frontend is published to the main website document root.
-- The Laravel application is uploaded outside the frontend document root and served from an API subdomain whose document root is the Laravel `public` directory.
-
-Example topology:
-
-- `https://youth.example.org` -> frontend document root
-- `https://api.youth.example.org` -> `<cpanel-home>/laravel-api/public`
+- `https://system.quovadisyouthhub.org` -> `/home/shemidig7/laravel-api/public`
+- The Vite frontend is copied into Laravel's `public` directory, and Laravel handles API requests under `/api`.
 
 The repository workflow is [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml). It runs tests, builds the frontend and production Composer dependencies, commits those build outputs to the `production` branch, then calls the cPanel API to pull that branch and run [`.cpanel.yml`](../../.cpanel.yml). Deployment does not use SSH or FTP.
 
 ## cPanel setup
 
-1. Create the main domain or subdomain for the frontend.
-2. Create an API subdomain and set its document root to the deployed Laravel `public` directory, for example `/home/USER/laravel-api/public`.
-3. Create a MySQL database and database user in cPanel. Grant the user all required privileges.
-4. Confirm the cPanel account's CLI PHP version is PHP 8.3 or newer and that `php` is available to cPanel deployment tasks.
-5. In cPanel Git Version Control, clone the repository into a path such as `/home/USER/repositories/archdiocese-nyeri-youth` and select the `production` branch. Record that full repository path for the `CPANEL_REPO_PATH` secret.
-6. Edit [`.cpanel.yml`](../../.cpanel.yml) on the source branch and replace both path placeholders with the actual Laravel application directory and frontend document root. Keep the Laravel API subdomain's document root pointed at the Laravel directory's `public/` folder.
-7. Set writable permissions for `storage/` and `bootstrap/cache/` in cPanel File Manager.
-8. Create the backend `.env` in the Laravel application directory using cPanel File Manager. It must not be committed or copied from the repository.
+1. Point `system.quovadisyouthhub.org` at the cPanel account and set its document root to `/home/shemidig7/laravel-api/public`. Do not use `public_html` for this domain.
+2. Create a MySQL database named `shemidig7_youthhub` and database user `shemidig7_youthhub` in cPanel. Grant the user all required privileges and record its password for the server `.env`.
+3. Confirm the cPanel account's CLI PHP version is PHP 8.3 or newer and that `php` is available to cPanel deployment tasks.
+4. In cPanel Git Version Control, clone the repository into a path such as `/home/shemidig7/repositories/archdiocese-nyeri-youth` and select the `production` branch. Record that full repository path for the `CPANEL_REPO_PATH` secret.
+5. Set writable permissions for `/home/shemidig7/laravel-api/storage/` and `/home/shemidig7/laravel-api/bootstrap/cache/` in cPanel File Manager.
+6. Create `/home/shemidig7/laravel-api/.env` using cPanel File Manager. It must not be committed or copied from the repository.
 
 The Laravel migration history in this repository was consolidated for fresh databases. Do not deploy it over a database that has already run the previous migration files until a data-preserving migration plan has been prepared.
 
@@ -30,16 +23,16 @@ A production backend environment should include values equivalent to:
 ```dotenv
 APP_ENV=production
 APP_DEBUG=false
-APP_URL=https://api.youth.example.org
-FRONTEND_URL=https://youth.example.org
+APP_URL=https://system.quovadisyouthhub.org
+FRONTEND_URL=https://system.quovadisyouthhub.org
 APP_KEY=base64:GENERATE_A_UNIQUE_KEY
 
 DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
-DB_DATABASE=CPANEL_DATABASE
-DB_USERNAME=CPANEL_DATABASE_USER
-DB_PASSWORD=CPANEL_DATABASE_PASSWORD
+DB_DATABASE=shemidig7_youthhub
+DB_USERNAME=shemidig7_youthhub
+DB_PASSWORD=SET_THE_CPANEL_DATABASE_PASSWORD
 
 SESSION_DRIVER=file
 CACHE_STORE=file
@@ -56,16 +49,16 @@ The current remote source branch is `Main` (capital M); the workflow runs tests 
 Create a GitHub environment named `production` and add these environment secrets:
 
 - `CPANEL_HOST`, for example `yourdomain.com` (without a scheme or port)
-- `CPANEL_USER`, the cPanel account username
+- `CPANEL_USER`, the cPanel account username `shemidig7`
 - `CPANEL_API_TOKEN`, a cPanel API token permitted to use Version Control update and deployment functions
 - `CPANEL_REPO_PATH`, the full path of the cPanel Git repository
-- `VITE_API_BASE_URL`, for example `https://api.youth.example.org`
+- `VITE_API_BASE_URL`, set to `https://system.quovadisyouthhub.org` so the frontend calls the API on the same origin
 
-Keep the cPanel token in GitHub Actions secrets; never put it in the repository or a URL. Add the repository Actions variable `CPANEL_DEPLOY_ENABLED=true` only after the production branch, cPanel repository, secrets, and both `.cpanel.yml` paths are configured. Until then, pushes still run tests and the deployment job remains skipped. Require environment approval if you want to review deployments before they run.
+Keep the cPanel token in GitHub Actions secrets; never put it in the repository or a URL. Add the repository Actions variable `CPANEL_DEPLOY_ENABLED=true` only after the production branch, cPanel repository, and secrets are configured. Until then, pushes still run tests and the deployment job remains skipped. Require environment approval if you want to review deployments before they run.
 
 ## Release behavior
 
-The workflow commits the production Composer `vendor/` directory and the built frontend assets to the `production` branch. It does not include `.env`, `node_modules`, or tests. cPanel deployment copies `backend/` into the Laravel application directory and `frontend/dist/` into the frontend document root. It then runs:
+The workflow commits the production Composer `vendor/` directory and the built frontend assets to the `production` branch. It does not include `.env`, `node_modules`, or tests. cPanel deployment copies `backend/` into the Laravel application directory and `frontend/dist/` into its `public/` directory, then restores Laravel's `.htaccess` so API and frontend routes are handled by Laravel. It then runs:
 
 ```bash
 php artisan migrate --force
@@ -77,11 +70,11 @@ php artisan view:cache
 
 The workflow does not seed or reset production data.
 
-The frontend includes an Apache `.htaccess` fallback so direct navigation to React Router paths such as `/register` resolves to `index.html`.
+Laravel serves the built `index.html` for frontend routes such as `/register`; API routes under `/api` and Laravel's `/up` health endpoint are not sent to the frontend.
 
 ## Admin portal and registration review
 
-The admin portal is published with the frontend at `https://youth.example.org/admin`. Its admin-only API allows searching and filtering program registrations and changing their status to `pending`, `approved`, or `rejected`. Public registrations enter the review queue as `pending`.
+The admin portal is published with the frontend at `https://system.quovadisyouthhub.org/admin`. Its admin-only API allows searching and filtering program registrations and changing their status to `pending`, `approved`, or `rejected`. Public registrations enter the review queue as `pending`.
 
 Administrators can import up to 500 members from a CSV at a time. Download the template in the admin portal; required columns are `full_name`, `username`, and `local_church_id`. Local church IDs are available from `/api/v1/local-churches`. The selected program's active configured fields are included as additional columns. Preview validates each row and issues an admin-bound, 30-minute preview that can only import the exact same file once. Import revalidates the rows, creates accounts only for valid rows, and skips invalid rows. Existing usernames are never linked automatically. Email and phone are optional and may be shared.
 
@@ -90,7 +83,7 @@ Imported accounts receive a random temporary password and cannot sign in until t
 The `users` table includes `is_admin`, which defaults to `false`. Provision an administrator only after deployment, using a trusted existing account:
 
 ```bash
-cd /home/USER/laravel-api
+cd /home/shemidig7/laravel-api
 php artisan tinker --execute="App\Models\User::where('username', 'ADMIN_USERNAME')->firstOrFail()->forceFill(['is_admin' => true])->save();"
 ```
 
@@ -98,7 +91,7 @@ Do not make the role assignable from public registration or place administrator 
 
 ## Common cPanel checks after deployment
 
-After the workflow completes, confirm the Laravel health endpoint and frontend URL in a browser. If a deployment looks successful but the site returns 500 responses, use cPanel File Manager and the cPanel error/log views to verify:
+After the workflow completes, confirm `https://system.quovadisyouthhub.org/up` and the frontend URL in a browser. If a deployment looks successful but the site returns 500 responses, use cPanel File Manager and the cPanel error/log views to verify:
 
 - `.env` exists and contains the correct production database settings.
 - `APP_KEY` was generated with `php artisan key:generate --show` and stored in `.env`.
@@ -113,11 +106,11 @@ After the workflow completes, confirm the Laravel health endpoint and frontend U
 
 This usually means one of the following:
 
-- `VITE_API_BASE_URL` points to the wrong origin.
-- The API subdomain document root is not the Laravel `public` directory.
+- `VITE_API_BASE_URL` points to the wrong origin; it should be `https://system.quovadisyouthhub.org`.
+- The domain document root is not `/home/shemidig7/laravel-api/public`.
 - The server `.env` is missing `APP_URL` or has a stale value.
 
-Check the rendered frontend build or browser network tab for a 404 or 500 response. Confirm the API origin resolves to `https://api.youth.example.org` and not the main site domain.
+Check the rendered frontend build or browser network tab for a 404 or 500 response. Confirm API requests go to `https://system.quovadisyouthhub.org/api/...`.
 
 ### 500 error on every Laravel route
 
@@ -125,7 +118,7 @@ Review the cPanel deployment task output and the Laravel log at `storage/logs/la
 
 ### Frontend route refresh fails with 404
 
-This is expected when the frontend is served from a static document root without rewrite rules. The deployment includes an Apache `.htaccess` file in the built frontend; confirm it was uploaded to the document root and that the host is configured to allow `.htaccess` rewrite rules.
+The deployment restores Laravel's `.htaccess` after copying the frontend build. Confirm the domain document root is `/home/shemidig7/laravel-api/public` and that the host allows `.htaccess` rewrite rules.
 
 ## Rollback approach
 
@@ -133,10 +126,10 @@ The `production` branch contains each deployed build as a normal commit. To roll
 
 ## First deployment checklist
 
-- Verify the API subdomain points to Laravel `public`, not the application root.
-- Verify the frontend build has `VITE_API_BASE_URL` set to the API origin.
+- Verify `system.quovadisyouthhub.org` points to `/home/shemidig7/laravel-api/public`.
+- Verify the frontend build has `VITE_API_BASE_URL` set to `https://system.quovadisyouthhub.org`.
 - Verify `APP_DEBUG=false` and production database credentials.
-- Set the GitHub Actions variable `CPANEL_DEPLOY_ENABLED=true` only after all cPanel paths and secrets are set, then run the workflow with `workflow_dispatch`.
+- Set the GitHub Actions variable `CPANEL_DEPLOY_ENABLED=true` only after cPanel and GitHub settings are ready, then run the workflow with `workflow_dispatch`.
 - Confirm `/up`, `/api/v1/programs`, and `/register` load over HTTPS.
 - Confirm `/admin` loads and an anonymous request to `/api/v1/admin/registrations` is rejected with HTTP 401.
 - Provision the first admin from a trusted existing account and verify that it can review and update registration status.
