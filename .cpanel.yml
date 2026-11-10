@@ -5,21 +5,38 @@ deployment:
       LARAVEL_DIR="/home/shemidig7/laravel-api";
       FRONTEND_DIR="$LARAVEL_DIR/public";
       FRONTEND_BUILD="frontend/dist";
+      PHP_BIN="/opt/cpanel/ea-php84/root/usr/bin/php";
       if [ ! -f "$FRONTEND_BUILD/index.html" ]; then
         echo "Frontend build missing: $FRONTEND_BUILD/index.html. Deploy from the production branch after CI builds frontend/dist." >&2;
+        exit 1;
+      fi;
+      if [ ! -f "backend/vendor/autoload.php" ]; then
+        echo "Laravel dependencies missing: backend/vendor/autoload.php. Deploy the production build containing backend/vendor." >&2;
         exit 1;
       fi;
       if [ ! -f "backend/public/index.php" ]; then
         echo "Laravel public entry point missing: backend/public/index.php." >&2;
         exit 1;
       fi;
+      if [ ! -x "$PHP_BIN" ]; then
+        echo "PHP 8.4 CLI not found at $PHP_BIN. Install/enable PHP 8.4 in cPanel or update PHP_BIN in .cpanel.yml." >&2;
+        exit 1;
+      fi;
+      if ! "$PHP_BIN" -r "if (version_compare(PHP_VERSION, \"8.4.1\", \"<\")) { exit(1); }"; then
+        echo "PHP 8.4.1 or newer is required for deployment." >&2;
+        exit 1;
+      fi;
       /bin/mkdir -p "$LARAVEL_DIR" "$FRONTEND_DIR";
       /bin/cp -R backend/. "$LARAVEL_DIR/";
+      if [ ! -s "$LARAVEL_DIR/vendor/autoload.php" ]; then
+        echo "Laravel dependencies did not copy to $LARAVEL_DIR/vendor/autoload.php." >&2;
+        exit 1;
+      fi;
       /bin/cp -R "$FRONTEND_BUILD/." "$FRONTEND_DIR/";
       /bin/cp backend/public/.htaccess "$FRONTEND_DIR/.htaccess";
       cd "$LARAVEL_DIR";
-      php artisan migrate --force;
-      php artisan optimize:clear;
-      php artisan config:cache;
-      php artisan route:cache;
-      php artisan view:cache'
+      "$PHP_BIN" artisan migrate --force;
+      "$PHP_BIN" artisan optimize:clear;
+      "$PHP_BIN" artisan config:cache;
+      "$PHP_BIN" artisan route:cache;
+      "$PHP_BIN" artisan view:cache'

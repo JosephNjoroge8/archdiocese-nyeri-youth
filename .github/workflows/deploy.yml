@@ -80,7 +80,7 @@ jobs:
       - name: Check out production branch
         uses: actions/checkout@v4
         with:
-          ref: production
+          ref: Main
           path: prod
           fetch-depth: 0
 
@@ -114,10 +114,16 @@ jobs:
           npm ci --prefix frontend
           npm run build --prefix frontend
 
+          test -s backend/vendor/autoload.php
+          test -s frontend/dist/index.html
+
       - name: Sync build into production branch
         env:
           SOURCE_SHA: ${{ github.sha }}
         run: |
+          test -s src/backend/vendor/autoload.php
+          test -s src/frontend/dist/index.html
+
           rsync -a --delete \
             --exclude='.git' \
             --exclude='.github' \
@@ -129,10 +135,17 @@ jobs:
 
           printf '.env\n**/.env\n**/storage/logs/*.log\n' > prod/.gitignore
           cd prod
+          if git ls-remote --exit-code origin refs/heads/production > /dev/null 2>&1; then
+            git fetch origin production
+            git switch --force-create production --track origin/production
+          else
+            git switch --force-create production
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git add -f backend/vendor frontend/dist
+          git ls-files --error-unmatch backend/vendor/autoload.php frontend/dist/index.html
           if ! git diff --cached --quiet; then
             git commit -m "Deploy ${SOURCE_SHA:0:7}"
             git push origin production
