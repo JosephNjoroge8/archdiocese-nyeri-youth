@@ -63,9 +63,9 @@ jobs:
         run: npm run build
 
   deploy:
-    name: Build production branch and deploy
+    name: Publish production build and deploy
     needs: test
-    if: github.ref == 'refs/heads/Main' && vars.CPANEL_DEPLOY_ENABLED == 'true'
+    if: github.ref == 'refs/heads/Main'
     runs-on: ubuntu-latest
     environment: production
     permissions:
@@ -151,7 +151,12 @@ jobs:
             git push origin production
           fi
 
+      - name: Report cPanel deployment disabled
+        if: vars.CPANEL_DEPLOY_ENABLED != 'true'
+        run: echo "Production build was published; set CPANEL_DEPLOY_ENABLED=true to trigger cPanel deployment."
+
       - name: Trigger cPanel update and deployment
+        if: vars.CPANEL_DEPLOY_ENABLED == 'true'
         env:
           CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
           CPANEL_USER: ${{ secrets.CPANEL_USER }}

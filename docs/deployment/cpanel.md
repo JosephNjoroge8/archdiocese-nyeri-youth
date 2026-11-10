@@ -44,7 +44,7 @@ Generate the application key once using a trusted local Laravel environment with
 
 ## GitHub setup
 
-The current remote source branch is `Main` (capital M); the workflow runs tests for pull requests and pushes to that branch. Protect `Main` by requiring a pull request and the `Test and build` status check. Create a `production` branch from `Main` in GitHub before the first deployment. Do not force-push it: each workflow run adds a normal build commit.
+The current remote source branch is `Main` (capital M); the workflow runs tests for pull requests and publishes a production build on pushes to that branch. Protect `Main` by requiring a pull request and the `Test and build` status check. The workflow creates the `production` branch from `Main` on its first run; subsequent runs add normal build commits. Do not force-push it.
 
 Create a GitHub environment named `production` and add these environment secrets:
 
@@ -54,11 +54,11 @@ Create a GitHub environment named `production` and add these environment secrets
 - `CPANEL_REPO_PATH`, the full path of the cPanel Git repository
 - `VITE_API_BASE_URL`, set to `https://system.quovadisyouthhub.org` so the frontend calls the API on the same origin
 
-Keep the cPanel token in GitHub Actions secrets; never put it in the repository or a URL. Add the repository Actions variable `CPANEL_DEPLOY_ENABLED=true` only after the production branch, cPanel repository, and secrets are configured. Until then, pushes still run tests and the deployment job remains skipped. Require environment approval if you want to review deployments before they run.
+Keep the cPanel token in GitHub Actions secrets; never put it in the repository or a URL. Set the repository Actions variable `CPANEL_DEPLOY_ENABLED=true` after the cPanel repository and secrets are configured to allow the workflow to call cPanel. Without it, pushes to `Main` still build and publish `backend/vendor/` and `frontend/dist/` to the `production` branch, but skip the cPanel deployment call. Require environment approval if you want to review production builds before they run.
 
 ## Release behavior
 
-The workflow commits the production Composer `vendor/` directory and the built frontend assets to the `production` branch, and verifies that `backend/vendor/autoload.php` and `frontend/dist/index.html` are tracked before deployment. It does not include `.env`, `node_modules`, or tests. cPanel deployment checks that these build outputs are present, copies `backend/` into the Laravel application directory and `frontend/dist/` into its `public/` directory, then restores Laravel's `.htaccess` so API and frontend routes are handled by Laravel. It verifies the copied autoloader and runs Artisan commands with PHP 8.4.1 or newer:
+The workflow commits the production Composer `vendor/` directory and the built frontend assets to the `production` branch, and verifies that `backend/vendor/autoload.php` and `frontend/dist/index.html` are tracked before the cPanel deployment step. It does not include `.env`, `node_modules`, or tests. When cPanel deployment is enabled, cPanel checks that these build outputs are present, copies `backend/` into the Laravel application directory and `frontend/dist/` into its `public/` directory, then restores Laravel's `.htaccess` so API and frontend routes are handled by Laravel. It verifies the copied autoloader and runs Artisan commands with PHP 8.4.1 or newer:
 
 ```bash
 /opt/cpanel/ea-php84/root/usr/bin/php artisan migrate --force
