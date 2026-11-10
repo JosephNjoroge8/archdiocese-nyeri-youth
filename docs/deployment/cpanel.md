@@ -11,7 +11,7 @@ The repository workflow is [`.github/workflows/deploy.yml`](../../.github/workfl
 
 1. Point `system.quovadisyouthhub.org` at the cPanel account and set its document root to `/home/shemidig7/laravel-api/public`. Do not use `public_html` for this domain.
 2. Create a MySQL database named `shemidig7_youthhub` and database user `shemidig7_youthhub` in cPanel. Grant the user all required privileges and record its password for the server `.env`.
-3. Confirm the cPanel account's CLI PHP version is PHP 8.4.1 or newer and that `php` is available to cPanel deployment tasks.
+3. Enable PHP 8.4.1 or newer for the domain in cPanel MultiPHP Manager. Confirm the CLI executable `/opt/cpanel/ea-php84/root/usr/bin/php` is available to deployment tasks; `.cpanel.yml` uses this PHP binary explicitly so it does not accidentally use the account's older default `php` (for example, PHP 8.2).
 4. In cPanel Git Version Control, clone the repository into a path such as `/home/shemidig7/repositories/archdiocese-nyeri-youth` and select the `production` branch. Record that full repository path for the `CPANEL_REPO_PATH` secret.
 5. Set writable permissions for `/home/shemidig7/laravel-api/storage/` and `/home/shemidig7/laravel-api/bootstrap/cache/` in cPanel File Manager.
 6. Create `/home/shemidig7/laravel-api/.env` using cPanel File Manager. It must not be committed or copied from the repository.
@@ -58,14 +58,14 @@ Keep the cPanel token in GitHub Actions secrets; never put it in the repository 
 
 ## Release behavior
 
-The workflow commits the production Composer `vendor/` directory and the built frontend assets to the `production` branch. It does not include `.env`, `node_modules`, or tests. cPanel deployment copies `backend/` into the Laravel application directory and `frontend/dist/` into its `public/` directory, then restores Laravel's `.htaccess` so API and frontend routes are handled by Laravel. It then runs:
+The workflow commits the production Composer `vendor/` directory and the built frontend assets to the `production` branch, and verifies that `backend/vendor/autoload.php` and `frontend/dist/index.html` are tracked before deployment. It does not include `.env`, `node_modules`, or tests. cPanel deployment checks that these build outputs are present, copies `backend/` into the Laravel application directory and `frontend/dist/` into its `public/` directory, then restores Laravel's `.htaccess` so API and frontend routes are handled by Laravel. It verifies the copied autoloader and runs Artisan commands with PHP 8.4.1 or newer:
 
 ```bash
-php artisan migrate --force
-php artisan optimize:clear
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
+/opt/cpanel/ea-php84/root/usr/bin/php artisan migrate --force
+/opt/cpanel/ea-php84/root/usr/bin/php artisan optimize:clear
+/opt/cpanel/ea-php84/root/usr/bin/php artisan config:cache
+/opt/cpanel/ea-php84/root/usr/bin/php artisan route:cache
+/opt/cpanel/ea-php84/root/usr/bin/php artisan view:cache
 ```
 
 The workflow does not seed or reset production data.
