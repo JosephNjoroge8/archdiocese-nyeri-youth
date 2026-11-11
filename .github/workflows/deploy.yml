@@ -74,7 +74,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
         with:
-          ref: Main
+          ref: ${{ github.sha }}
           path: src
 
       - name: Check out production branch
@@ -124,6 +124,16 @@ jobs:
           test -s src/backend/vendor/autoload.php
           test -s src/frontend/dist/index.html
 
+          (
+            cd prod
+            if git ls-remote --exit-code origin refs/heads/production > /dev/null 2>&1; then
+              git fetch origin production
+              git switch --force-create production --track origin/production
+            else
+              git switch --force-create production
+            fi
+          )
+
           rsync -a --delete \
             --exclude='.git' \
             --exclude='.github' \
@@ -135,12 +145,6 @@ jobs:
 
           printf '.env\n**/.env\n**/storage/logs/*.log\n' > prod/.gitignore
           cd prod
-          if git ls-remote --exit-code origin refs/heads/production > /dev/null 2>&1; then
-            git fetch origin production
-            git switch --force-create production --track origin/production
-          else
-            git switch --force-create production
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
